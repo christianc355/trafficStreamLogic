@@ -1,0 +1,13 @@
+{
+    "name": "calculateRoute",
+    "event": "calculateRoute",
+    "responseTopic": "webhookResponse",
+    "errorResponseTopic": "",
+    "disabled": false,
+    "template": "webhook",
+    "url": "https://api.tomtom.com/routing/1/calculateRoute/{{{coordinates}}}/json?key={{{TomTomAPIKey}}}&computeBestOrder=true&routeType=fastest&traffic=true",
+    "requestType": "GET",
+    "noDefaults": true,
+    "rejectUnauthorized": true,
+    "responseTemplate": "{\n  \"travelTimeInSeconds\": \"{{routes.0.summary.travelTimeInSeconds}}\",\n  \"trafficDelayInSeconds\": \"{{routes.0.summary.trafficDelayInSeconds}}\"\n}"
+}

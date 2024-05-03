@@ -1,0 +1,13 @@
+{
+    "name": "updateHardware",
+    "event": "updateHardware",
+    "responseTopic": "webhookResponse",
+    "errorResponseTopic": "",
+    "disabled": false,
+    "template": "webhook",
+    "url": "https://console.particle.io",
+    "requestType": "GET",
+    "noDefaults": true,
+    "rejectUnauthorized": true,
+    "responseTemplate": "{{{PARTICLE_EVENT_VALUE}}}"
+}
