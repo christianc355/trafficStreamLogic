@@ -1,5 +1,5 @@
 /*
- * Project trafficStream
+ * Project trafficLogic
  * Author: Christian Chavez
  * Date: April 29th, 2024
  * For comprehensive documentation and examples, please visit:
@@ -103,23 +103,15 @@ void setup()
   lastTime = -120000;                                                        // intitialize our timer variable
 }
 
-// add a logic function
-
-// loop() runs over and over again, as quickly as it can execute.
 void loop()
 {
-  // The core of your code will likely live here.
-
   lightPixels(pixelPattern);
 
   if (Particle.connected() && millis() - lastTime > 60000)
   {
-
     Serial.printf("\n\nLocal Time Now: %02i:%02i\n\n", Time.hour(), Time.minute()); // print current time
 
-    String callData = String::format("{\"coordinates\": \"%s\"}", travelLocations.c_str());
-
-    JSONBufferWriter writer(data, sizeof(data) - 1);
+    JSONBufferWriter writer(data, sizeof(data) - 1); //build json data
 
     writer.beginObject();
 
@@ -137,7 +129,6 @@ void loop()
     Serial.printf("json: %s\n", data);
 
     Particle.publish("trafficLogic", data); // call Particle Logic function
-    // Particle.publish("calculateRoute", data);
 
     lastTime = millis(); // reset our timer
   }
@@ -163,7 +154,7 @@ void lightPixels(int patternNumber)
 
     if (patternNumber == 1) // low traffic
     {
-      pixelColor = random(0x002000, 0x00FF00);
+      pixelColor = random(0x00FF00, 0x00FF00);
       for (int i = 0; i < PIXELCOUNT; i++)
       {
         pixel.setPixelColor(currentPixel, pixelColor); // green range
@@ -177,7 +168,7 @@ void lightPixels(int patternNumber)
     }
     if (patternNumber == 2) // heavy traffic
     {
-      pixelColor = random(0x200000, 0xFF0000);
+      pixelColor = random(0xFF0000, 0xFF0000);
       for (int i = 0; i < PIXELCOUNT; i++)
       {
         pixel.setPixelColor(currentPixel, pixelColor); // range
@@ -191,7 +182,7 @@ void lightPixels(int patternNumber)
     }
     if (patternNumber == 3) // optimal departure window
     {
-      pixelColor = random(0xFF4500, 0xFFA500); // orange range
+      pixelColor = random(0xFFA500, 0xFFA500); // orange range
       for (int i = 0; i < PIXELCOUNT; i++)
       {
         pixel.setPixelColor(currentPixel, pixelColor);
@@ -205,7 +196,7 @@ void lightPixels(int patternNumber)
     }
     if (patternNumber == 4) // beyond optimal departure window
     {
-      pixelColor = random(0x000020, 0x0000FF); // blue range
+      pixelColor = random(0x0000FF, 0x0000FF); // blue range
       for (int i = 0; i < PIXELCOUNT; i++)
       {
         pixel.setPixelColor(currentPixel, pixelColor);
@@ -265,6 +256,7 @@ void handleResponse(const char *event, const char *data)
       }
 
       int currentTimeinMinutes = Time.hour() * 60 + Time.minute(); // current time converted to minutes from midnight for calculating minutes to leave
+      // int currentTimeinMinutes = 21 * 60 + 23; // current time converted to minutes from midnight for calculating minutes to leave
 
       int arriveByTimeinMinutes = targetHour * 60 + targetMinute; // calculate the arrive by time in minutes from midnight
 
@@ -299,8 +291,15 @@ void handleResponse(const char *event, const char *data)
               pixelPattern = 3; // optimal departure window
             }
             else
-            { // minutesToLeave is less than zero so optimal departure window is passed
-              pixelPattern = 4;
+            { 
+              if (targetHour == -1) //no specified arrival time
+              {
+                pixelPattern = 0;
+              }
+              else
+              {
+                pixelPattern = 4; //beyond optimal departure window
+              }
             }
           }
         }
@@ -318,7 +317,7 @@ void handleResponse(const char *event, const char *data)
       if (targetHour == -1) // no specified arrival time
       {
         display.setTextSize(1);
-        display.printf("Time Now: %02i:%02i\n%s\nTravel time: %im %is\nTraffic: %im %is\nCurrent ETA: %02i:%02i\nArrive anytime...", Time.hour(), Time.minute(), routeDescription.c_str(), travelTimeInSeconds / 60, travelTimeInSeconds % 60, trafficDelayInSeconds / 60, trafficDelayInSeconds % 60, targetHour, targetMinute);
+        display.printf("Time Now: %02i:%02i\n%s\nTravel time: %im %is\nTraffic: %im %is\nCurrent ETA: %02i:%02i\nArrive anytime...", Time.hour(), Time.minute(), routeDescription.c_str(), travelTimeInSeconds / 60, travelTimeInSeconds % 60, trafficDelayInSeconds / 60, trafficDelayInSeconds % 60, currentArrivalHour, currentArrivalMinute);
       }
       else if (targetHour == -2) // nighttime
       {
