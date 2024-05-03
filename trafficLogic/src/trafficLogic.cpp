@@ -9,7 +9,7 @@
 // Include Particle Device OS APIs
 #include "Particle.h"
 
-#include "Adafruit_GFX.h"
+#include "Adafruit_GFX.h" //for OLED display
 #include "Adafruit_SSD1306.h"
 
 #include "neopixel.h"
@@ -22,31 +22,27 @@ Adafruit_SSD1306 display(OLED_RESET);
 
 const int PIXELCOUNT = 64;
 Adafruit_NeoPixel pixel(PIXELCOUNT, SPI1, WS2812B);
-int pixelPattern = 0; // variable to track pixel sequences
-
+int pixelPattern = 0; // variable to track pixel sequences (0 = ambient colors, 1 = low traffic, 2 = heavy traffic, 3 = time to leave, 4 = late)
 int pixelColor = 0x0000FF; // variable to store color variable starting with default blue
-
 int pixelBrightness = 100; // variable for pixel brightness 0-255
 
 int myTimeZone = -7; // variable to adjust time zone from UTC
 
-unsigned int lastTime = -60000; // variable for interval timer to track millis()
-
+unsigned int logicCallInterval = 60000; // default to calling logic every 60000 milliseconds
+unsigned int lastTime = -logicCallInterval; // used to track last time logic was called
 unsigned int lastShowTime = -60000; // variable to track last pixel update
 
+
+// default paramaters for tomtom api call
 String travelLocations = "34.1808,-118.3089:33.9416,-118.4085"; // Burbank to LAX
-
 String routeDescription = "Burbank to LAX";
-
 int travelTimeInSeconds = -999;
 int trafficDelayInSeconds = -999;
-
-int targetHour = 10; // variable to track target arrival time
+int targetHour = 10; // (-1 = no specified arrival time, -2 = nighttime, no destinations)
 int targetMinute = 00;
-
 int minutesToLeave = -999;
 
-char data[particle::protocol::MAX_EVENT_DATA_LENGTH + 1];
+char data[particle::protocol::MAX_EVENT_DATA_LENGTH + 1]; //stores json data event sent during logic call
 
 // Let Device OS manage the connection to the Particle Cloud
 SYSTEM_MODE(AUTOMATIC);
@@ -66,8 +62,6 @@ void lightPixels(int patternNumber);
 // setup() runs once, when the device is first turned on
 void setup()
 {
-  // Put initialization like pinMode and begin functions here
-
   Serial.begin(9600);
   delay(1000);                           // wait for the serial monitor to initialize
   Serial.printf("PLEASE STAND BY...\n"); // print waiting message on serial monitor
@@ -107,7 +101,7 @@ void loop()
 {
   lightPixels(pixelPattern);
 
-  if (Particle.connected() && millis() - lastTime > 60000)
+  if (Particle.connected() && millis() - lastTime > logicCallInterval)
   {
     Serial.printf("\n\nLocal Time Now: %02i:%02i\n\n", Time.hour(), Time.minute()); // print current time
 
@@ -134,102 +128,30 @@ void loop()
   }
 }
 
-void lightPixels(int patternNumber)
-{
-  static int currentPixel = 0;
-  if (millis() - lastShowTime > 222)
-  {
-
-    if (patternNumber == 0) // default ambient random pattern
-    {
-      pixel.setPixelColor(currentPixel, pixelColor);
-      pixel.show();
-      currentPixel++;
-      if (currentPixel > PIXELCOUNT)
-      {
-        currentPixel = 0;
-        pixelColor = random(0x000000, 0xFFFFFF);
-      }
-    }
-
-    if (patternNumber == 1) // low traffic
-    {
-      pixelColor = random(0x00FF00, 0x00FF00);
-      for (int i = 0; i < PIXELCOUNT; i++)
-      {
-        pixel.setPixelColor(currentPixel, pixelColor); // green range
-        pixel.show();
-      }
-      currentPixel++;
-      if (currentPixel > PIXELCOUNT)
-      {
-        currentPixel = 0;
-      }
-    }
-    if (patternNumber == 2) // heavy traffic
-    {
-      pixelColor = random(0xFF0000, 0xFF0000);
-      for (int i = 0; i < PIXELCOUNT; i++)
-      {
-        pixel.setPixelColor(currentPixel, pixelColor); // range
-        pixel.show();
-      }
-      currentPixel++;
-      if (currentPixel > PIXELCOUNT)
-      {
-        currentPixel = 0;
-      }
-    }
-    if (patternNumber == 3) // optimal departure window
-    {
-      pixelColor = random(0xFFA500, 0xFFA500); // orange range
-      for (int i = 0; i < PIXELCOUNT; i++)
-      {
-        pixel.setPixelColor(currentPixel, pixelColor);
-        pixel.show();
-      }
-      currentPixel++;
-      if (currentPixel > PIXELCOUNT)
-      {
-        currentPixel = 0;
-      }
-    }
-    if (patternNumber == 4) // beyond optimal departure window
-    {
-      pixelColor = random(0x0000FF, 0x0000FF); // blue range
-      for (int i = 0; i < PIXELCOUNT; i++)
-      {
-        pixel.setPixelColor(currentPixel, pixelColor);
-        pixel.show();
-      }
-      currentPixel++;
-      if (currentPixel > PIXELCOUNT)
-      {
-        currentPixel = 0;
-      }
-    }
-    lastShowTime = millis();
-  }
-}
-
 void handleResponse(const char *event, const char *data)
 {
   Serial.printf("\n\nWebhook response...\n\n");
 
   Serial.printf("\ndata: %s\n", data);
 
-  String nestedEvent = "";
-
-  if (data)
+  if (data) //if data is valid
   {
-
-    JSONValue tomtomData = JSONValue::parseCopy(data);
+    //parse json data from webhook responses
+    JSONValue tomtomData = JSONValue::parseCopy(data); 
     if (tomtomData.isValid())
     {
       JSONObjectIterator iterator(tomtomData);
       while (iterator.next())
       {
-        if (iterator.name() == "travelTimeInSeconds")
+        if (iterator.name() == "pixelBrightness")
+        {
+          pixelBrightness = iterator.value().toInt();
+        }
+        else if (iterator.name() == "logicCallInterval")
+        {
+          logicCallInterval = iterator.value().toInt();
+        }
+        else if (iterator.name() == "travelTimeInSeconds")
         {
           travelTimeInSeconds = iterator.value().toInt();
         }
@@ -241,10 +163,6 @@ void handleResponse(const char *event, const char *data)
         {
           routeDescription = (const char *)iterator.value().toString();
         }
-        else if (iterator.name() == "pixelBrightness")
-        {
-          pixelBrightness = iterator.value().toInt();
-        }
         else if (iterator.name() == "targetHour")
         {
           targetHour = iterator.value().toInt();
@@ -255,18 +173,19 @@ void handleResponse(const char *event, const char *data)
         }
       }
 
-      int currentTimeinMinutes = Time.hour() * 60 + Time.minute(); // current time converted to minutes from midnight for calculating minutes to leave
-      // int currentTimeinMinutes = 21 * 60 + 23; // current time converted to minutes from midnight for calculating minutes to leave
-
-      int arriveByTimeinMinutes = targetHour * 60 + targetMinute; // calculate the arrive by time in minutes from midnight
+      
+      //convert time to minutes from midnight for calculating minutes to leave
+      int currentTimeinMinutes = Time.hour() * 60 + Time.minute();
+      int arriveByTimeinMinutes = targetHour * 60 + targetMinute;
 
       minutesToLeave = arriveByTimeinMinutes - currentTimeinMinutes - travelTimeInSeconds / 60;
 
+      //convert minutes from midnight back to 24 hour time
       int currentArrivalTimeinMinutes = currentTimeinMinutes + travelTimeInSeconds / 60;
-
       int currentArrivalHour = (currentArrivalTimeinMinutes / 60) % 24;
       int currentArrivalMinute = currentArrivalTimeinMinutes % 60;
 
+      //set pixel pattern sequence based on data
       if (targetHour == -2) //-2 specifies nighttime sequence from logic
       {
         pixelPattern = 0;
@@ -311,8 +230,7 @@ void handleResponse(const char *event, const char *data)
       }
 
       pixel.setBrightness(pixelBrightness); // set pixel brightness if received from logic
-
-      display.clearDisplay();
+      display.clearDisplay(); //clear display for new data
       display.setCursor(0, 0);
       if (targetHour == -1) // no specified arrival time
       {
@@ -331,5 +249,85 @@ void handleResponse(const char *event, const char *data)
       }
       display.display();
     }
+  }
+}
+
+void lightPixels(int patternNumber)
+{
+  static int currentPixel = 0;
+  if (millis() - lastShowTime > 222)
+  {
+
+    //determine a random range of colors for each pattern
+
+    if (patternNumber == 0) // default ambient random pattern
+    {
+      pixel.setPixelColor(currentPixel, pixelColor);
+      pixel.show();
+      currentPixel++;
+      if (currentPixel > PIXELCOUNT)
+      {
+        currentPixel = 0;
+        pixelColor = random(0x000000, 0xFFFFFF); //all 16 million+ hex colors at random
+      }
+    }
+
+    if (patternNumber == 1) // low traffic
+    {
+      pixelColor = random(0x00FF00, 0x33FF33); //green range
+      for (int i = 0; i < PIXELCOUNT; i++)
+      {
+        pixel.setPixelColor(currentPixel, pixelColor);
+        pixel.show();
+      }
+      currentPixel++;
+      if (currentPixel > PIXELCOUNT)
+      {
+        currentPixel = 0;
+      }
+    }
+    if (patternNumber == 2) // heavy traffic
+    {
+      pixelColor = random(0xFF0000, 0xFF3333); //red range
+      for (int i = 0; i < PIXELCOUNT; i++)
+      {
+        pixel.setPixelColor(currentPixel, pixelColor); 
+        pixel.show();
+      }
+      currentPixel++;
+      if (currentPixel > PIXELCOUNT)
+      {
+        currentPixel = 0;
+      }
+    }
+    if (patternNumber == 3) // optimal departure window
+    {
+      pixelColor = random(0xFFA500, 0xFFB733); // orange 
+      for (int i = 0; i < PIXELCOUNT; i++)
+      {
+        pixel.setPixelColor(currentPixel, pixelColor);
+        pixel.show();
+      }
+      currentPixel++;
+      if (currentPixel > PIXELCOUNT)
+      {
+        currentPixel = 0;
+      }
+    }
+    if (patternNumber == 4) // beyond optimal departure window
+    {
+      pixelColor = random(0x0000FF, 0x3333FF); // blue range
+      for (int i = 0; i < PIXELCOUNT; i++)
+      {
+        pixel.setPixelColor(currentPixel, pixelColor);
+        pixel.show();
+      }
+      currentPixel++;
+      if (currentPixel > PIXELCOUNT)
+      {
+        currentPixel = 0;
+      }
+    }
+    lastShowTime = millis();
   }
 }
